@@ -23,7 +23,7 @@ static struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
 	BT_GAP_ADV_FAST_INT_MAX_1, /* 0x60 units, 96 units, 60ms */
 	NULL); /* Set to NULL for undirected advertising */
 
-LOG_MODULE_REGISTER(Lesson3_Exercise2, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(IoT_Lesson1_Exercise1, LOG_LEVEL_INF);
 struct bt_conn *my_conn = NULL;
 
 static struct bt_gatt_exchange_params exchange_params;
@@ -34,10 +34,13 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err,
 #define DEVICE_NAME CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
 
-#define USER_BUTTON DK_BTN1_MSK
-#define RUN_STATUS_LED DK_LED1
-#define CONNECTION_STATUS_LED DK_LED2
-#define RUN_LED_BLINK_INTERVAL 1000
+#define USER_BUTTON 			DK_BTN1_MSK
+#define RUN_STATUS_LED 			DK_LED1
+#define CONNECTION_STATUS_LED 	DK_LED2
+#define USER_LED 				DK_LED3
+#define RUN_LED_BLINK_INTERVAL 	1000
+
+static bool app_button_state;
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -170,15 +173,33 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err,
 	}
 }
 
+static void app_led_cb(bool led_state)
+{
+	LOG_INF("LED changed");
+	dk_set_led(USER_LED, led_state);
+}
+
+static bool app_button_cb(void)
+{
+	return app_button_state;
+}
+
+static struct bt_lbs_cb lbs_callbacs = {
+	.led_cb = app_led_cb,
+	.button_cb = app_button_cb,
+};
+
 static void button_changed(uint32_t button_state, uint32_t has_changed)
 {
 	int err;
 	if (has_changed & USER_BUTTON) {
+		uint32_t user_button_state = button_state & USER_BUTTON;
 		LOG_INF("Button changed");
-		err = bt_lbs_send_button_state(button_state ? true : false);
+		err = bt_lbs_send_button_state(user_button_state);
 		if (err) {
 			LOG_ERR("Couldn't send notification. err: %d", err);
 		}
+		app_button_state = user_button_state ? true : false;
 	}
 }
 
@@ -216,6 +237,12 @@ void main(void)
 	err = bt_enable(NULL);
 	if (err) {
 		LOG_ERR("Bluetooth init failed (err %d)", err);
+		return;
+	}
+
+	err = bt_lbs_init(&lbs_callbacs);
+	if (err) {
+		printk("Failed to init LBS (err:%d)\n", err);
 		return;
 	}
 
